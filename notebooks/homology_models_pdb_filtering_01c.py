@@ -1,0 +1,369 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "6060a470-db96-4dc1-b8d2-5c111877e6cf",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import ast\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "from coverage_functions import *"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0a2ef314-1dd6-467a-87a2-f28c952e9d48",
+   "metadata": {},
+   "source": [
+    "# Filtering Homology Models wrt PDB structures "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "e051cca1-7e30-410c-8713-185413daf4f1",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "35808 9541\n"
+     ]
+    }
+   ],
+   "source": [
+    "modbase = pd.read_csv(\"processed_data/modbase/modbase_30aa_hq_fixed.tsv\", sep=\"\\t\", dtype={'PDBBegin': 'object','PDBEnd': 'object'})\n",
+    "swissmodel = pd.read_csv(\"processed_data/swissmodel/swissmodel_30aa_hq.tsv\", sep=\"\\t\")\n",
+    "swissmodel = swissmodel.rename(columns={'UniProtKB_ac': 'Entry', 'uniprot_seq_length': 'Length', 'from': 'TargetBeg', 'to': 'TargetEnd'})\n",
+    "print(len(modbase), len(swissmodel))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "24ce0f2e-c4ba-4351-a0d5-0fff16c0d4f0",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "126005"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# filtered pdb structures for uniprot entries\n",
+    "pdb = pd.read_csv(\"processed_data/uniprot/proteome_have_pdb_begin_end_missing_consec_greater_30pdb.csv\")\n",
+    "len(pdb)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "b32dc3e7-81c6-455c-99aa-2b755523d036",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# get all covered residues for every entry (missings already removed)\n",
+    "def get_all_covered_residues(pdb_file):\n",
+    "    pdb_file = pdb_file.drop_duplicates(subset=[\"Entry\", \"ResidueList\"], keep=\"last\") # 51845\n",
+    "    pdb_file['ResidueList'] = pdb_file['ResidueList'].apply(lambda x: ast.literal_eval(x))\n",
+    "    pdb_file2 = pdb_file.groupby('Entry')['ResidueList'].apply(list).reset_index(name='AllCoveredResidues')\n",
+    "    pdb_file2['AllCoveredResidues'] = pdb_file2['AllCoveredResidues'].apply(lambda x: sum(x, [])).apply(set)\n",
+    "    return pdb_file2\n",
+    "\n",
+    "pdb2 = get_all_covered_residues(pdb)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "daee2f34-5e01-4c29-a457-8df23c37a1c4",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "7085 7085 7085\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(len(pdb2), pdb2.Entry.nunique(), pdb.Entry.nunique())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "754ac78b-d32d-4e26-be6b-6c298f268952",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def get_model_residues(beg, end):\n",
+    "    residues = list(range(int(beg), int(end)+1))\n",
+    "    return set(residues)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "02cd042d-ad74-448e-8998-ff729b14938e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# get model residues\n",
+    "swissmodel['model_residues'] = swissmodel.apply(lambda x: get_model_residues(beg=x['TargetBeg'], end=x['TargetEnd']), axis=1)\n",
+    "modbase['model_residues'] = modbase.apply(lambda x: get_model_residues(beg=x['TargetBeg'], end=x['TargetEnd']), axis=1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "a0203474-0c54-4762-8a4b-de3757bb992b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# merge with new pdb dataframe to add all covered residues by PDB\n",
+    "swissmodel = swissmodel.merge(pdb2, on='Entry', how='left')\n",
+    "modbase = modbase.merge(pdb2, on='Entry', how='left')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "77f1a48a-fba5-4d42-af51-63173389920d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# there may be no PDB structures for some entries, store them into another dataframe\n",
+    "# swiss-model\n",
+    "swissmodel_NoPDB = swissmodel[swissmodel['AllCoveredResidues'].isnull()]\n",
+    "swissmodel_PDB = swissmodel[~swissmodel['AllCoveredResidues'].isnull()]\n",
+    "# modbase\n",
+    "modbase_NoPDB = modbase[modbase['AllCoveredResidues'].isnull()]\n",
+    "modbase_PDB = modbase[~modbase['AllCoveredResidues'].isnull()]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "6b8ac63d-d329-4e6f-bece-71008d25c3ec",
+   "metadata": {
+    "collapsed": true,
+    "jupyter": {
+     "outputs_hidden": true
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "<ipython-input-12-75f241e8d0be>:2: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy\n",
+      "  swissmodel_PDB['difference'] = swissmodel_PDB.apply(lambda x: x['model_residues']-x['AllCoveredResidues'], axis=1)\n",
+      "<ipython-input-12-75f241e8d0be>:3: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy\n",
+      "  modbase_PDB['difference'] = modbase_PDB.apply(lambda x: x['model_residues']-x['AllCoveredResidues'], axis=1)\n"
+     ]
+    }
+   ],
+   "source": [
+    "# we need residues present in the model but not the pdb structure\n",
+    "# get the residues ONLY covered by the model\n",
+    "swissmodel_PDB['difference'] = swissmodel_PDB.apply(lambda x: x['model_residues']-x['AllCoveredResidues'], axis=1)\n",
+    "modbase_PDB['difference'] = modbase_PDB.apply(lambda x: x['model_residues']-x['AllCoveredResidues'], axis=1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "f86a363e-25a3-4e84-b6bf-25cda4d8a1a8",
+   "metadata": {
+    "collapsed": true,
+    "jupyter": {
+     "outputs_hidden": true
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "<ipython-input-13-ff4b4bdbff6f>:2: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy\n",
+      "  swissmodel_PDB['only_in_model'] = swissmodel_PDB['difference'].apply(len)\n",
+      "<ipython-input-13-ff4b4bdbff6f>:3: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy\n",
+      "  modbase_PDB['only_in_model'] = modbase_PDB['difference'].apply(len)\n"
+     ]
+    }
+   ],
+   "source": [
+    "# get the number of residues only covered by the model\n",
+    "swissmodel_PDB['only_in_model'] = swissmodel_PDB['difference'].apply(len)\n",
+    "modbase_PDB['only_in_model'] = modbase_PDB['difference'].apply(len)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "id": "ec928a82-2d8a-4182-bbab-0ae2d498bb14",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "(6421, 20424) (3120, 15384)\n"
+     ]
+    }
+   ],
+   "source": [
+    "print((len(swissmodel_PDB), len(modbase_PDB)), (len(swissmodel_NoPDB), len(modbase_NoPDB)))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "7fe548d9-b37e-45fe-a951-5631fc9700e8",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(1225, 2810)"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(swissmodel_PDB[swissmodel_PDB['only_in_model'] >= 30]), len(swissmodel_PDB[swissmodel_PDB['only_in_model'] > 0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "ee4dfd79-371d-4e69-8a30-eefb9a6b919a",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(3570, 11707)"
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(modbase_PDB[modbase_PDB['only_in_model'] >= 30]), len(modbase_PDB[modbase_PDB['only_in_model'] > 0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "id": "12359daa-2b65-4a2d-81dd-da12087618f1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# get the models if the difference is greater than 0\n",
+    "swissmodel_PDB_greater_0 = swissmodel_PDB[swissmodel_PDB['only_in_model'] > 0]\n",
+    "modbase_PDB_greater_0 = modbase_PDB[modbase_PDB['only_in_model'] > 0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "id": "74401d54-7811-458e-a9a6-615c65a19ecb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# combine\n",
+    "swissmodel_ALL = pd.concat([swissmodel_PDB_greater_0, swissmodel_NoPDB], axis=0, ignore_index=True)\n",
+    "modbase_ALL = pd.concat([modbase_PDB_greater_0, modbase_NoPDB], axis=0, ignore_index=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "id": "0fad0492-ac5c-4089-89a4-0c9b998a3210",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "5930 2810 3120 5930\n",
+      "27091 11707 15384 27091\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(len(swissmodel_ALL), len(swissmodel_PDB_greater_0), len(swissmodel_NoPDB), len(swissmodel_PDB_greater_0)+len(swissmodel_NoPDB))\n",
+    "print(len(modbase_ALL), len(modbase_PDB_greater_0), len(modbase_NoPDB), len(modbase_PDB_greater_0)+len(modbase_NoPDB))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 37,
+   "id": "13bdb258-cb61-487b-8992-2b9fb37f55c9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# save to file\n",
+    "modbase_ALL.to_excel('processed_data/modbase/modbase_30aa_hq_fixed_extra_to_pdb.xlsx', index=False)\n",
+    "swissmodel_ALL.to_excel('processed_data/swissmodel/swissmodel_30aa_hq_extra_to_pdb.xlsx', index=False)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.8"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

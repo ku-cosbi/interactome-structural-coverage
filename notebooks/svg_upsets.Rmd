@@ -1,0 +1,64 @@
+---
+title: "svg_upsets"
+output: html_document
+date: "2023-03-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(UpSetR)
+library(svglite)
+library(tidyverse)
+```
+
+```{r}
+all_raw <- readxl::read_excel('processed_data/interactomes/upset_ready/upset_all_raw.xlsx')
+pdb <- readxl::read_excel('processed_data/interactomes/upset_ready/upset_pdb.xlsx')
+homology <- readxl::read_excel('processed_data/interactomes/upset_ready/upset_homology.xlsx')
+af_85 <- readxl::read_excel('processed_data/interactomes/upset_ready/upset_af_85.xlsx')
+```
+
+
+```{r}
+svglite(file="figures/interactome/SVG/all_upset.svg", width = 10, height = 6)
+UpSetR::upset(as.data.frame(all_raw), number.angles = 90, point.size = 2.5, line.size = 1, 
+              main.bar.color = "#212C58",
+              sets.bar.color = "#FC7869",
+              mainbar.y.label = "Protein-Protein Interactions", sets.x.label = "PPIs per Database", 
+              text.scale = c(2.3, 2.3, 2, 1.8, 2.3, 2))
+dev.off()
+```
+
+
+```{r}
+svglite(file="figures/interactome/SVG/homology_upset.svg", width = 10, height = 6)
+UpSetR::upset(as.data.frame(homology), number.angles = 90, point.size = 2.5, line.size = 1, 
+              main.bar.color = "#212C58",
+              sets.bar.color = "#FC7869",
+              mainbar.y.label = "Protein-Protein Interactions", sets.x.label = "PPIs per Database", 
+              text.scale = c(2.3, 2.3, 2, 1.8, 2.3, 2))
+dev.off()
+```
+
+```{r}
+svglite(file="figures/interactome/SVG/pdb_upset.svg", width = 10, height = 6)
+UpSetR::upset(as.data.frame(pdb), number.angles = 90, point.size = 2.5, line.size = 1, 
+              main.bar.color = "#212C58",
+              sets.bar.color = "#FC7869",
+              mainbar.y.label = "Protein-Protein Interactions", sets.x.label = "PPIs per Database", 
+              text.scale = c(2.3, 2.3, 2, 1.8, 2.3, 2))
+dev.off()
+```
+
+```{r}
+svglite(file="figures/interactome/SVG/af85_upset.svg", width = 10, height = 6)
+UpSetR::upset(as.data.frame(af_85), number.angles = r.angles = 90, point.size = 2.5, line.size = 1, 
+              main.bar.color = "#212C58",
+              sets.bar.color = "#FC7869",
+              mainbar.y.label = "Protein-Protein Interactions", sets.x.label = "PPIs per Database", 
+              text.scale = c(2.3, 2.3, 2, 1.8, 2.3, 2))
+dev.off()
+```

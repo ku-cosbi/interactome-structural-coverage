@@ -12,7 +12,7 @@ def calculate_coverage(begin_end, prot_length):
     return coverage_percent
 
 
-def get_res_coverage_by_threshold(df, threshold, gb="Entry"):
+def get_res_coverage_by_threshold(df, threshold, gb="Entry", upper=True):
     dfs = [x for _, x in df.groupby(by=gb)]
     coverage_percents = []
     for df in dfs:
@@ -25,13 +25,33 @@ def get_res_coverage_by_threshold(df, threshold, gb="Entry"):
             covered_resid.update(range(p_min, p_max + 1))
         coverage_percents.append(len(covered_resid) * 100 / prot_length)
     num_proteins = 0
+    
     for i in coverage_percents:
-        if i >= threshold:
-            num_proteins += 1
+        if upper:
+            if i >= threshold:
+                num_proteins += 1
+        else:
+            if i < threshold:
+                num_proteins += 1
     # pct_threshold = num_threshold/len(coverage_percents) * 100 
     return num_proteins
 
 
+def get_res_coverage_by_threshold_extra(df, threshold, gb="Entry"):
+    dfs = [x for _, x in df.groupby(by=gb)]
+    coverage_percents = []
+    for df in dfs:
+        covered_resid = set()
+        prot_length = list(set(df["Length"].to_list()))[0]
+        for model in range(len(df)):
+            covered_resid.update(df.iloc[model].difference)
+        coverage_percents.append(len(covered_resid) * 100 / prot_length)
+    
+    num_proteins = 0
+    for i in coverage_percents:
+        if i >= threshold:
+            num_proteins += 1
+    return num_proteins
 def get_protein_based_coverage(num_proteins, total_prot_num):
     prot_cov = num_proteins/total_prot_num * 100
     return np.round(prot_cov, 2)
@@ -50,6 +70,16 @@ def get_coverage_percent(df, proteome_length, gb="Entry"):
         coverage_percent += len(covered_resid) * 100 / proteome_length
     return coverage_percent
 
+
+def get_coverage_percent_extra(df, proteome_length, gb="Entry"):
+    dfs = [x for _, x in df.groupby(by=gb)]
+    coverage_percent = 0
+    for df in dfs:
+        covered_resid = set()
+        for model in range(len(df)):
+            covered_resid.update(df.iloc[model].difference)
+        coverage_percent += len(covered_resid) * 100 / proteome_length
+    return coverage_percent
 
 def get_residue_coverage(df, gb="Entry", length="Length", res_beg_end=['TargetBeg','TargetEnd']):
     dfs = [x for _, x in df.groupby(by=gb)]
